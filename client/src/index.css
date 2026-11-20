@@ -1,0 +1,8 @@
+@tailwind base; @tailwind components; @tailwind utilities;
+body { background: radial-gradient(900px 500px at 50% -10%, rgba(225,29,72,.18), transparent), #050506; color: #fff; min-height: 100dvh; }
+.glass { @apply rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl; }
+.btn { @apply inline-flex items-center justify-center rounded-xl px-5 py-3 font-bold transition active:scale-95 disabled:opacity-40 disabled:pointer-events-none; }
+.btn-red { @apply bg-crimson text-white shadow-[0_0_30px_-6px_#e11d48]; }
+.btn-ghost { @apply border border-white/15 bg-white/5; }
+input[type=range] { accent-color: #e11d48; width: 100%; }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
