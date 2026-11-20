@@ -1,0 +1,12 @@
+{
+  "name": "kdrama-ai-caption",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "setup": "npm --prefix server install && npm --prefix client install && npm --prefix server run fonts",
+    "dev": "concurrently -n api,web \"npm --prefix server run dev\" \"npm --prefix client run dev\"",
+    "build": "npm --prefix client run build",
+    "start": "npm --prefix server start"
+  },
+  "devDependencies": { "concurrently": "^9.0.0" }
+}
