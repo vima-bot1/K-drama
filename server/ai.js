@@ -1,0 +1,76 @@
+import fs from 'node:fs';
+
+// ---- Speech-to-text: OpenAI Whisper (Korean, segment timestamps) ----
+export async function transcribeKorean(audioPath) {
+  const key = process.env.OPENAI_API_KEY;
+  if (!key) throw new Error('OPENAI_API_KEY is not set on the server.');
+  const form = new FormData();
+  form.append('file', await fs.openAsBlob(audioPath), 'audio.mp3');
+  form.append('model', 'whisper-1');
+  form.append('language', 'ko');
+  form.append('response_format', 'verbose_json');
+  form.append('timestamp_granularities[]', 'segment');
+  const r = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+    method: 'POST', headers: { Authorization: `Bearer ${key}` }, body: form,
+  });
+  if (!r.ok) throw new Error(`Speech recognition failed (${r.status}): ${(await r.text()).slice(0, 200)}`);
+  const data = await r.json();
+  return (data.segments || [])
+    .filter((s) => s.text.trim() && (s.no_speech_prob ?? 0) < 0.7)
+    .map((s) => ({ start: s.start, end: s.end, ko: s.text.trim() }));
+}
+
+// ---- Translation + speaker guess: Gemini ----
+export async function translateToSinhala(segs) {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) throw new Error('GEMINI_API_KEY is not set on the server.');
+  const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+  const prompt = `You are a professional Korean-to-Sinhala subtitle translator for Korean drama clips.
+Translate each numbered Korean line into natural, conversational spoken Sinhala (Sinhala Unicode script), the way a Sri Lankan viewer would actually say it.
+Rules: keep meaning, emotion and tone (anger, sarcasm, tenderness); no literal word-for-word output; keep lines short;
+keep names as transliterated Sinhala; treat the lines as one continuous conversation for context.
+Also guess the speaker for each line as "A", "B", "C"... based on conversational turns, or null if unsure.
+Return ONLY a JSON array: [{"i":number,"si":string,"speaker":string|null}] with exactly one item per input line.
+
+INPUT:
+${JSON.stringify(segs.map((s, i) => ({ i, ko: s.ko })))}`;
+  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { responseMimeType: 'application/json', temperature: 0.4 },
+    }),
+  });
+  if (!r.ok) throw new Error(`Translation failed (${r.status}): ${(await r.text()).slice(0, 200)}`);
+  const j = await r.json();
+  let arr;
+  try { arr = JSON.parse(j.candidates[0].content.parts[0].text); }
+  catch { throw new Error('Translation returned an unreadable response. Please try again.'); }
+  const map = new Map(arr.map((x) => [x.i, x]));
+  return segs.map((s, i) => ({ ...s, si: String(map.get(i)?.si || '').trim(), speaker: map.get(i)?.speaker || null }));
+}
+
+// ---- Split into short TikTok-sized captions, no overlaps ----
+export function buildCaptions(segs, maxChars = 28) {
+  const out = [];
+  for (const s of segs) {
+    if (!s.si) continue;
+    const words = s.si.split(/\s+/);
+    const chunks = []; let cur = '';
+    for (const w of words) {
+      if (cur && (cur + ' ' + w).length > maxChars) { chunks.push(cur); cur = w; } else cur = cur ? cur + ' ' + w : w;
+    }
+    if (cur) chunks.push(cur);
+    const total = chunks.reduce((a, c) => a + c.length, 0);
+    let t = s.start;
+    for (const c of chunks) {
+      const end = t + ((s.end - s.start) * c.length) / total;
+      out.push({ start: +t.toFixed(2), end: +end.toFixed(2), text: c, speaker: s.speaker, ko: s.ko });
+      t = end;
+    }
+  }
+  out.sort((a, b) => a.start - b.start);
+  for (let i = 0; i < out.length - 1; i++) out[i].end = Math.min(out[i].end, +(out[i + 1].start - 0.02).toFixed(2));
+  return out.filter((c) => c.end > c.start).map((c, i) => ({ id: i + 1, ...c }));
+}
