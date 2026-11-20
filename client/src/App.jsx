@@ -63,7 +63,7 @@ export default function App() {
     raf = requestAnimationFrame(tick); return () => cancelAnimationFrame(raf);
   }, []);
 
-  const missing = health && [!health.ffmpeg && 'FFmpeg', !health.font && 'Sinhala font (npm run setup)', !health.openai && 'OPENAI_API_KEY', !health.gemini && 'GEMINI_API_KEY'].filter(Boolean);
+  const missing = health && [!health.ffmpeg && 'FFmpeg', !health.font && 'Sinhala font (npm run setup)', !health.gemini && 'GEMINI_API_KEY'].filter(Boolean);
 
   function pick(f) {
     setError('');
