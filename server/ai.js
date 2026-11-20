@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 
 // ---- Speech-to-text: OpenAI Whisper (Korean, segment timestamps) ----
-export async function transcribeKorean(audioPath) {
+async function whisper(audioPath) {
   const key = process.env.OPENAI_API_KEY;
   if (!key) throw new Error('OPENAI_API_KEY is not set on the server.');
   const form = new FormData();
@@ -18,6 +18,42 @@ export async function transcribeKorean(audioPath) {
   return (data.segments || [])
     .filter((s) => s.text.trim() && (s.no_speech_prob ?? 0) < 0.7)
     .map((s) => ({ start: s.start, end: s.end, ko: s.text.trim() }));
+}
+
+// Uses Whisper if OPENAI_API_KEY is set, otherwise Gemini (free tier) hears the audio directly.
+export async function transcribeKorean(audioPath) {
+  return process.env.OPENAI_API_KEY ? whisper(audioPath) : geminiTranscribe(audioPath);
+}
+
+const toSec = (v) => {
+  if (typeof v === 'number') return v;
+  const p = String(v).split(':').map(Number);
+  return p.some(Number.isNaN) ? NaN : p.reduce((a, x) => a * 60 + x, 0);
+};
+
+async function geminiTranscribe(audioPath) {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) throw new Error('GEMINI_API_KEY is not set on the server.');
+  const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+  const prompt = `Listen to this audio from a Korean drama clip. Transcribe every spoken Korean line exactly, in Hangul.
+Return ONLY a JSON array: [{"start":number,"end":number,"ko":string}] where start/end are decimal seconds from the very beginning of the audio.
+Each item is one short phrase or sentence (about 1-6 seconds). Keep items in order, with no overlaps. Ignore music, sound effects and silence. If there is no speech return [].`;
+  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+    body: JSON.stringify({
+      contents: [{ parts: [{ inline_data: { mime_type: 'audio/mp3', data: fs.readFileSync(audioPath).toString('base64') } }, { text: prompt }] }],
+      generationConfig: { responseMimeType: 'application/json', temperature: 0 },
+    }),
+  });
+  if (!r.ok) throw new Error(`Speech recognition failed (${r.status}): ${(await r.text()).slice(0, 200)}`);
+  const j = await r.json();
+  let arr;
+  try { arr = JSON.parse(j.candidates[0].content.parts[0].text); }
+  catch { throw new Error('Speech recognition returned an unreadable response. Please try again.'); }
+  return arr
+    .map((x) => ({ start: toSec(x.start), end: toSec(x.end), ko: String(x.ko || '').trim() }))
+    .filter((x) => x.ko && Number.isFinite(x.start) && Number.isFinite(x.end) && x.end > x.start);
 }
 
 // ---- Translation + speaker guess: Gemini ----
