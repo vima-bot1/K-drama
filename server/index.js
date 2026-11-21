@@ -81,13 +81,13 @@ app.post('/api/jobs/:id/transcribe', (req, res) => {
     try {
       const audio = path.join(path.dirname(j.file), 'audio.mp3');
       await run('ffmpeg', ['-y', '-i', j.file, '-vn', '-ac', '1', '-ar', '16000', '-b:a', '48k', audio]);
-      j.stage = 'transcribing';
+      j.stage = 'transcribing'; console.log(j.id, 'transcribing');
       const segs = await transcribeKorean(audio);
       if (!segs.length) throw new Error('No Korean speech was detected in this video.');
-      j.stage = 'translating';
+      j.stage = 'translating'; console.log(j.id, 'translating');
       j.captions = buildCaptions(await translateToSinhala(segs));
       j.stage = 'done';
-    } catch (e) { j.stage = 'error'; j.error = e.message; }
+    } catch (e) { console.error(j.id, 'FAILED:', e.message); j.stage = 'error'; j.error = e.message; }
   })();
 });
 

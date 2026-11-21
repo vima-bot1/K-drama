@@ -1,5 +1,11 @@
 import fs from 'node:fs';
 
+// fetch with a 2-minute timeout so a stuck AI request becomes a clear error instead of hanging forever
+const tfetch = async (url, opts) => {
+  try { return await tfetch(url, { ...opts, signal: AbortSignal.timeout(120000) }); }
+  catch (e) { throw new Error(e.name === 'TimeoutError' ? 'The AI service took too long (over 2 minutes). Please try again.' : 'Could not reach the AI service: ' + e.message); }
+};
+
 // ---- Speech-to-text: OpenAI Whisper (Korean, segment timestamps) ----
 async function whisper(audioPath) {
   const key = process.env.OPENAI_API_KEY;
@@ -10,7 +16,7 @@ async function whisper(audioPath) {
   form.append('language', 'ko');
   form.append('response_format', 'verbose_json');
   form.append('timestamp_granularities[]', 'segment');
-  const r = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+  const r = await tfetch('https://api.openai.com/v1/audio/transcriptions', {
     method: 'POST', headers: { Authorization: `Bearer ${key}` }, body: form,
   });
   if (!r.ok) throw new Error(`Speech recognition failed (${r.status}): ${(await r.text()).slice(0, 200)}`);
@@ -38,7 +44,7 @@ async function geminiTranscribe(audioPath) {
   const prompt = `Listen to this audio from a Korean drama clip. Transcribe every spoken Korean line exactly, in Hangul.
 Return ONLY a JSON array: [{"start":number,"end":number,"ko":string}] where start/end are decimal seconds from the very beginning of the audio.
 Each item is one short phrase or sentence (about 1-6 seconds). Keep items in order, with no overlaps. Ignore music, sound effects and silence. If there is no speech return [].`;
-  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+  const r = await tfetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
     body: JSON.stringify({
@@ -70,7 +76,7 @@ Return ONLY a JSON array: [{"i":number,"si":string,"speaker":string|null}] with 
 
 INPUT:
 ${JSON.stringify(segs.map((s, i) => ({ i, ko: s.ko })))}`;
-  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+  const r = await tfetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
     body: JSON.stringify({
