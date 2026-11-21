@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { transcribeKorean, translateToSinhala, buildCaptions } from './ai.js';
+import { transcribeKorean, translateSegments, buildCaptions } from './ai.js';
 import { buildAss } from './ass.js';
 
 const run = promisify(execFile);
@@ -19,6 +19,7 @@ const MAX_DUR = +process.env.MAX_DURATION_SEC || 300;
 const MAX_EXPORTS = 2;
 fs.mkdirSync(DATA, { recursive: true });
 
+const LANGS = { si: ['Sinhala', 'Noto Sans Sinhala'], en: ['English', 'Noto Sans'], ta: ['Tamil', 'Noto Sans Tamil'], hi: ['Hindi', 'Noto Sans Devanagari'] };
 const jobs = new Map();
 let activeExports = 0;
 const app = express();
@@ -75,6 +76,7 @@ app.get('/api/video/:id', (req, res) => {
 app.post('/api/jobs/:id/transcribe', (req, res) => {
   const j = getJob(req, res); if (!j) return;
   if (['extracting', 'transcribing', 'translating'].includes(j.stage)) return res.status(409).json({ error: 'Already processing.' });
+  j.target = LANGS[req.body?.target] ? req.body.target : 'si';
   j.error = null; j.stage = 'extracting';
   res.status(202).json(pub(j));
   (async () => {
@@ -85,7 +87,7 @@ app.post('/api/jobs/:id/transcribe', (req, res) => {
       const segs = await transcribeKorean(audio);
       if (!segs.length) throw new Error('No Korean speech was detected in this video.');
       j.stage = 'translating'; console.log(j.id, 'translating');
-      j.captions = buildCaptions(await translateToSinhala(segs));
+      j.captions = buildCaptions(await translateSegments(segs, LANGS[j.target][0]));
       j.stage = 'done';
     } catch (e) { console.error(j.id, 'FAILED:', e.message); j.stage = 'error'; j.error = e.message; }
   })();
@@ -108,7 +110,7 @@ app.post('/api/jobs/:id/export', (req, res) => {
   const W = portrait ? target : even((j.width * target) / j.height);
   const H = portrait ? even((j.height * target) / j.width) : target;
   const dir = path.join(DATA, j.id);
-  fs.writeFileSync(path.join(dir, 'captions.ass'), buildAss(caps, st, W, H));
+  fs.writeFileSync(path.join(dir, 'captions.ass'), buildAss(caps, st, W, H, LANGS[j.target || 'si'][1]));
   const out = path.join(dir, 'output.mp4');
   j.exp = { state: 'rendering', progress: 0 };
   activeExports++;

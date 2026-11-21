@@ -13,7 +13,6 @@ async function whisper(audioPath) {
   const form = new FormData();
   form.append('file', await fs.openAsBlob(audioPath), 'audio.mp3');
   form.append('model', 'whisper-1');
-  form.append('language', 'ko');
   form.append('response_format', 'verbose_json');
   form.append('timestamp_granularities[]', 'segment');
   const r = await tfetch('https://api.openai.com/v1/audio/transcriptions', {
@@ -41,7 +40,7 @@ async function geminiTranscribe(audioPath) {
   const key = process.env.GEMINI_API_KEY;
   if (!key) throw new Error('GEMINI_API_KEY is not set on the server.');
   const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-  const prompt = `Listen to this audio from a Korean drama clip. Transcribe every spoken Korean line exactly, in Hangul.
+  const prompt = `Listen to this audio from a video clip. Detect the spoken language automatically and transcribe every spoken line exactly, in its original language and script.
 Return ONLY a JSON array: [{"start":number,"end":number,"ko":string}] where start/end are decimal seconds from the very beginning of the audio.
 Each item is one short phrase or sentence (about 1-6 seconds). Keep items in order, with no overlaps. Ignore music, sound effects and silence. If there is no speech return [].`;
   const r = await tfetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
@@ -63,14 +62,13 @@ Each item is one short phrase or sentence (about 1-6 seconds). Keep items in ord
 }
 
 // ---- Translation + speaker guess: Gemini ----
-export async function translateToSinhala(segs) {
+export async function translateSegments(segs, target = 'Sinhala') {
   const key = process.env.GEMINI_API_KEY;
   if (!key) throw new Error('GEMINI_API_KEY is not set on the server.');
   const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-  const prompt = `You are a professional Korean-to-Sinhala subtitle translator for Korean drama clips.
-Translate each numbered Korean line into natural, conversational spoken Sinhala (Sinhala Unicode script), the way a Sri Lankan viewer would actually say it.
+  const prompt = `You are a professional subtitle translator. Translate each numbered line (the source language may be any language; detect it) into natural, conversational spoken ${target}, written in ${target}'s native script, the way native viewers would actually say it.
 Rules: keep meaning, emotion and tone (anger, sarcasm, tenderness); no literal word-for-word output; keep lines short;
-keep names as transliterated Sinhala; treat the lines as one continuous conversation for context.
+write names the way ${target} speakers would; if a line is already in ${target}, keep it as is; treat the lines as one continuous conversation for context.
 Also guess the speaker for each line as "A", "B", "C"... based on conversational turns, or null if unsure.
 Return ONLY a JSON array: [{"i":number,"si":string,"speaker":string|null}] with exactly one item per input line.
 

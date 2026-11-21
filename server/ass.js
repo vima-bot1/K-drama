@@ -6,7 +6,7 @@ const ts = (s) => {
 };
 const clean = (t) => t.replace(/[{}]/g, '').replace(/\\/g, '').replace(/\r?\n/g, '\\N');
 
-export function buildAss(captions, style, W, H) {
+export function buildAss(captions, style, W, H, font = 'Noto Sans Sinhala') {
   const fs = Math.round((style.fontSize / 100) * H);
   const mv = Math.round((style.bottom / 100) * H);
   const bg = style.background;
@@ -22,7 +22,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,Bold,Italic,Underline,StrikeOut,ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV,Encoding
-Style: Default,Noto Sans Sinhala,${fs},&H00FFFFFF,&H00FFFFFF,${bg ? box : '&H00000000'},${bg ? box : '&H90000000'},-1,0,0,0,100,100,0,0,${bg ? 3 : 1},${outline},${shadow},2,${Math.round(W * 0.06)},${Math.round(W * 0.06)},${mv},1
+Style: Default,${font},${fs},&H00FFFFFF,&H00FFFFFF,${bg ? box : '&H00000000'},${bg ? box : '&H90000000'},-1,0,0,0,100,100,0,0,${bg ? 3 : 1},${outline},${shadow},2,${Math.round(W * 0.06)},${Math.round(W * 0.06)},${mv},1
 
 [Events]
 Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text
