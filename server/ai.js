@@ -2,7 +2,7 @@ import fs from 'node:fs';
 
 // fetch with a 2-minute timeout so a stuck AI request becomes a clear error instead of hanging forever
 const tfetch = async (url, opts) => {
-  try { return await tfetch(url, { ...opts, signal: AbortSignal.timeout(120000) }); }
+  try { return await fetch(url, { ...opts, signal: AbortSignal.timeout(120000) }); }
   catch (e) { throw new Error(e.name === 'TimeoutError' ? 'The AI service took too long (over 2 minutes). Please try again.' : 'Could not reach the AI service: ' + e.message); }
 };
 
